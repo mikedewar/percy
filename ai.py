@@ -2,6 +2,8 @@ from openai import OpenAI
 import json
 import datetime
 
+import todo
+
 class AI():
     def __init__(self) -> None:
         self.client = OpenAI()
@@ -14,6 +16,7 @@ class AI():
             data = json.load(f)
             self.default_questions = "\n".join(data['default_questions'])
             self.qa = data["qa"]
+            self.todo_list_prompt = todo.get_todo_list()
             self.meta_prompt = data['meta_prompt']
             # if it's the morning, get the morning prompt
             if hour < 12:
@@ -33,13 +36,30 @@ class AI():
 
     def get_questions(self) -> str:
 
-        messages = self.messages()
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=self.up_to_messages()
+        )
+        
+        up_to_questions = response.choices[0].message.content.split("\n")
 
         response = self.client.chat.completions.create(
             model=self.model,
-            messages=messages
+            messages=self.todo_messages()
         )
-        return response.choices[0].message.content.split("\n")
+
+        todo_questions = response.choices[0].message.content.split("\n")
+
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=self.todo_suggestions_messages()
+        )
+
+        todo_suggestions_messages = response.choices[0].message.content.split("\n")
+
+        return up_to_questions + todo_questions + todo_suggestions_messages
+
     
     def get_qa_prompt(self):
         prompt = ""
@@ -50,7 +70,7 @@ class AI():
                 prompt += f"Answer: {qa['a']}\n"
         return prompt
 
-    def messages(self) -> list[str]:
+    def up_to_messages(self) -> list[str]:
         return [
             {"role": "system", "content": self.meta_prompt},
             {"role": "system", "content": self.day_date_prompt},
@@ -59,6 +79,37 @@ class AI():
             {"role": "user", "content": self.user_prompt}
         ]
     
+    def todo_suggestions_messages(self) -> list[str]:
+        with open('data.json') as f:
+            data = json.load(f)
+        return [
+            {"role": "system", "content": self.meta_prompt},
+            {"role": "system", "content": self.todo_list_prompt},
+            {"role": "system", "content": self.get_qa_prompt()},
+            {"role": "user", "content": data["suggested_todo_prompt"]}
+        ]
+
+    def todo_messages(self) -> str:
+
+        # Load the data from the JSON file
+        with open('data.json') as f:
+            data = json.load(f)
+
+        todo_prompt = "Here is my current todo list:\n"
+        todo_prompt += self.todo_list_prompt
+
+        print(todo_prompt)
+
+        client = OpenAI()
+        messages = [
+            {"role": "system", "content": data["meta_prompt"]},
+            {"role": "system", "content": todo_prompt},
+            {"role": "user", "content": data["todo_prompt"]}
+        ]
+        return messages
+
+
+
     def summarise(self) -> str:
 
         # Load the data from the JSON file
@@ -80,7 +131,7 @@ class AI():
         messages = [
             {"role": "system", "content": data["meta_prompt"]},
             {"role": "system", "content": qa_prompt},
-            {"role": "user", "content": "please summarise my notes for the last seven days"}
+            {"role": "user", "content": "please summarise my notes for the last seven days. Please return the summary in .txt format as a bullet pointed list, one bullet point per line. Important: there must be NO numbers at the start of each question! Only return the summary bullets no other text."}
         ]
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",

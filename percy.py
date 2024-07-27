@@ -6,7 +6,6 @@ import json
 
 class Percy(Cmd):
 
-
     prompt = ' > '
 
     def __init__(self) -> None:
@@ -24,7 +23,6 @@ class Percy(Cmd):
 
     def preloop(self):
         print("🐶", self.questions[0])
-        
 
     def default(self, inp):
         if inp:
@@ -53,6 +51,6 @@ if __name__ == "__main__":
     percy.cmdloop()
     percy.update_qas()
 
-    print("🐶 here is the summary of the last 7 days")
-    print(percy.ai.summarise())
+    #print("🐶 here is the summary of the last 7 days")
+    #print(percy.ai.summarise())
 
